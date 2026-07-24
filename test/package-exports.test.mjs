@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 describe("published package exports", () => {
   it("loads through the ESM import condition", async () => {
-    const sdk = await import("@inklet/sdk");
+    const sdk = await import("@inklethq/sdk");
 
     assert.equal(typeof sdk.Inklet, "function");
     assert.equal(sdk.Inklet, sdk.InkletClient);
@@ -12,7 +12,7 @@ describe("published package exports", () => {
 
   it("loads through the CommonJS require condition", () => {
     const require = createRequire(import.meta.url);
-    const sdk = require("@inklet/sdk");
+    const sdk = require("@inklethq/sdk");
 
     assert.equal(typeof sdk.Inklet, "function");
     assert.equal(sdk.Inklet, sdk.InkletClient);

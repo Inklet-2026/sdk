@@ -1,5 +1,5 @@
 {
-  "name": "@inklet/sdk",
+  "name": "@inklethq/sdk",
   "version": "0.1.0-alpha",
   "description": "Official JavaScript and TypeScript SDK for Inklet.",
   "license": "UNLICENSED",

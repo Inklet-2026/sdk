@@ -1,4 +1,4 @@
-# `@inklet/sdk`
+# `@inklethq/sdk`
 
 Official server-side JavaScript and TypeScript SDK for Inklet.
 
@@ -20,13 +20,13 @@ browser runtime and throws before sending a request.
 ## Install
 
 ```sh
-npm install @inklet/sdk@alpha
+npm install @inklethq/sdk@alpha
 ```
 
 ## Initialize
 
 ```ts
-import { Inklet } from "@inklet/sdk";
+import { Inklet } from "@inklethq/sdk";
 
 const inklet = new Inklet({
   secretKey: process.env.INKLET_PROJECT_SECRET_KEY!,
@@ -36,7 +36,7 @@ const inklet = new Inklet({
 The same package also works from CommonJS JavaScript:
 
 ```js
-const { Inklet } = require("@inklet/sdk");
+const { Inklet } = require("@inklethq/sdk");
 
 const inklet = new Inklet({
   secretKey: process.env.INKLET_PROJECT_SECRET_KEY,
@@ -98,7 +98,7 @@ import {
   InvalidSecretKeyError,
   PermissionDeniedError,
   RevokedSecretKeyError,
-} from "@inklet/sdk";
+} from "@inklethq/sdk";
 
 try {
   await inklet.request("/api/devices");
@@ -145,7 +145,7 @@ npm publish --access public --tag alpha
 
 Then configure npm trusted publishing for:
 
-- package: `@inklet/sdk`
+- package: `@inklethq/sdk`
 - GitHub organization: `Inklet-2026`
 - repository: `sdk`
 - workflow filename: `publish.yml`
@@ -155,7 +155,7 @@ Then configure npm trusted publishing for:
 With npm 11.15 or newer, the same configuration can be created from the CLI:
 
 ```sh
-npm trust github @inklet/sdk \
+npm trust github @inklethq/sdk \
   --file publish.yml \
   --repo Inklet-2026/sdk \
   --env npm \

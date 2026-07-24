@@ -2,7 +2,7 @@ import {
   Inklet,
   type InkletClientOptions,
   type InkletRequestOptions,
-} from "@inklet/sdk";
+} from "@inklethq/sdk";
 
 const options = {
   secretKey: "inklet_pat_typecheck",

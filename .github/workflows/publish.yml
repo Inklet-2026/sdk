@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish @inklet/sdk
+    name: Publish @inklethq/sdk
     runs-on: ubuntu-latest
     environment: npm
 
@@ -54,9 +54,9 @@ jobs:
         id: registry
         shell: bash
         run: |
-          if npm view "@inklet/sdk@${{ steps.release.outputs.package_version }}" version >/dev/null 2>&1; then
+          if npm view "@inklethq/sdk@${{ steps.release.outputs.package_version }}" version >/dev/null 2>&1; then
             echo "published=true" >> "${GITHUB_OUTPUT}"
-            echo "@inklet/sdk@${{ steps.release.outputs.package_version }} is already published; verification will continue without republishing."
+            echo "@inklethq/sdk@${{ steps.release.outputs.package_version }} is already published; verification will continue without republishing."
           else
             echo "published=false" >> "${GITHUB_OUTPUT}"
           fi
