@@ -1,0 +1,49 @@
+{
+  "name": "@inklet/sdk",
+  "version": "0.1.0-alpha",
+  "description": "Official JavaScript and TypeScript SDK for Inklet.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Inklet-2026/sdk.git"
+  },
+  "homepage": "https://github.com/Inklet-2026/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Inklet-2026/sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit && tsc --project test/tsconfig.json",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run build && npm run typecheck && npm run test",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run check"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
