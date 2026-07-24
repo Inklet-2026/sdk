@@ -3,9 +3,9 @@
 Official server-side JavaScript and TypeScript SDK for Inklet.
 
 > v0.1 alpha foundation: client initialization, Project Secret Key/PAT
-> authentication, safe error handling, and npm release automation. Display,
-> Push, Content, Presentation, Preview, and Webhook resource APIs will build on
-> this transport.
+> authentication, and safe error handling. Display, Push, Content,
+> Presentation, Preview, and Webhook resource APIs will build on this
+> transport.
 
 ## Requirements
 
@@ -62,7 +62,7 @@ Keep the documented `/api/*` prefix in request paths:
 const devices = await inklet.request("/api/devices");
 ```
 
-For a controlled local service or test server, override the Cloud address:
+For a controlled local service or test server, override the API base URL:
 
 ```ts
 const inklet = new Inklet({
@@ -123,61 +123,3 @@ npm run pack:check
 
 `npm run check` runs strict TypeScript checking, unit tests, and the ESM/CJS
 build.
-
-## Publishing
-
-After the one-time bootstrap below, publishing is tag-driven. A Git tag must
-exactly match the version in `package.json`. Prereleases automatically use the
-dist-tag derived from their prerelease name, so `0.1.0-alpha` uses `alpha`
-rather than `latest`.
-
-### First publish bootstrap
-
-npm requires a package to exist before a Trusted Publisher can be attached.
-Publish the first alpha once from a maintainer machine:
-
-```sh
-npm login
-npm whoami
-npm run check
-npm publish --access public --tag alpha
-```
-
-Then configure npm trusted publishing for:
-
-- package: `@inklethq/sdk`
-- GitHub organization: `Inklet-2026`
-- repository: `sdk`
-- workflow filename: `publish.yml`
-- environment: `npm`
-- allowed action: `npm publish`
-
-With npm 11.15 or newer, the same configuration can be created from the CLI:
-
-```sh
-npm trust github @inklethq/sdk \
-  --file publish.yml \
-  --repo Inklet-2026/sdk \
-  --env npm \
-  --allow-publish
-```
-
-Finally, record the first release in Git after the package exists:
-
-```sh
-git tag v0.1.0-alpha
-git push origin v0.1.0-alpha
-```
-
-The workflow recognizes that this bootstrap version already exists, verifies
-the tagged source, and skips republishing it. For subsequent releases, update
-the package version and push its matching tag; GitHub Actions will publish it
-through OIDC.
-
-The workflow uses GitHub OIDC and npm provenance; no long-lived `NPM_TOKEN` is
-stored in the repository.
-
-The current backend documentation covers JWT access tokens, not Project PATs.
-The SDK sends the configured PAT as a Bearer credential, but the backend must
-add and document project-scoped PAT validation before PAT-authenticated calls
-to protected `/api/*` routes can succeed.
