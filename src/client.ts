@@ -1,16 +1,25 @@
 import {
   ApiError,
+  AuthenticationFailedError,
   BrowserEnvironmentError,
+  ConflictError,
   ConfigurationError,
   InkletError,
   InvalidResponseError,
   InvalidSecretKeyError,
   NetworkError,
   NotFoundError,
+  PayloadTooLargeError,
   PermissionDeniedError,
   RateLimitError,
   RevokedSecretKeyError,
 } from "./errors.js";
+import { AssetsResource } from "./assets.js";
+import { ContentsResource } from "./contents.js";
+import { DisplaysResource } from "./displays.js";
+import { PresentationsResource } from "./presentations.js";
+import { PushResource } from "./push.js";
+import type { PresignedUpload, ResourceTransport } from "./resource.js";
 
 export const DEFAULT_INKLET_BASE_URL = "https://dev.iminklet.com";
 
@@ -21,15 +30,14 @@ type FetchImplementation = (
 
 export interface InkletClientOptions {
   /**
-   * A server-side Project Secret Key created in the Inklet portal.
-   */
-  secretKey?: string;
-
-  /**
-   * Compatibility alias for `secretKey`. PATs are treated as project-scoped
-   * bearer credentials and must only be used in trusted environments.
+   * A server-side personal access token created in the Inklet portal.
    */
   pat?: string;
+
+  /**
+   * Compatibility alias for `pat` from the first SDK alpha.
+   */
+  secretKey?: string;
 
   /**
    * Inklet Cloud is used by default. Override this for a controlled local
@@ -54,6 +62,7 @@ interface ErrorPayload {
   code?: string | undefined;
   message?: string | undefined;
   requestId?: string | undefined;
+  details?: Readonly<Record<string, unknown>> | undefined;
 }
 
 /**
@@ -64,6 +73,11 @@ interface ErrorPayload {
  */
 export class InkletClient {
   readonly baseUrl: string;
+  readonly assets: AssetsResource;
+  readonly contents: ContentsResource;
+  readonly displays: DisplaysResource;
+  readonly presentations: PresentationsResource;
+  readonly push: PushResource;
 
   readonly #secretKey: string;
   readonly #fetch: FetchImplementation;
@@ -73,13 +87,23 @@ export class InkletClient {
 
     if (!options || typeof options !== "object") {
       throw new ConfigurationError(
-        "InkletClient requires an options object containing a Project Secret Key.",
+        "InkletClient requires an options object containing a personal access token.",
       );
     }
 
     this.#secretKey = resolveSecretKey(options);
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.#fetch = resolveFetch(options.fetch);
+
+    const transport: ResourceTransport = {
+      request: this.request.bind(this),
+      upload: this.upload.bind(this),
+    };
+    this.assets = new AssetsResource();
+    this.contents = new ContentsResource(transport);
+    this.presentations = new PresentationsResource(transport);
+    this.displays = new DisplaysResource(transport);
+    this.push = new PushResource(transport, this.contents);
   }
 
   async request<T = unknown>(
@@ -175,6 +199,36 @@ export class InkletClient {
 
     return text as T;
   }
+
+  private async upload(upload: PresignedUpload): Promise<void> {
+    assertServerEnvironment();
+    const url = normalizeUploadUrl(upload.url);
+    const form = new FormData();
+    for (const [key, value] of Object.entries(upload.fields)) {
+      form.append(key, value);
+    }
+    form.append("file", upload.blob, upload.filename);
+
+    let response: Response;
+    try {
+      response = await this.#fetch(url, {
+        method: "POST",
+        body: form,
+        redirect: "error",
+      });
+    } catch {
+      throw new NetworkError(
+        "Unable to upload an Inklet asset. Check the network connection and retry the Push.",
+      );
+    }
+
+    if (!response.ok) {
+      throw new ApiError("Inklet asset storage rejected the upload.", {
+        status: response.status,
+        code: "asset_upload_failed",
+      });
+    }
+  }
 }
 
 export { InkletClient as Inklet };
@@ -185,14 +239,14 @@ function resolveSecretKey(options: InkletClientOptions): string {
 
   if (secretKey && pat) {
     throw new ConfigurationError(
-      "Provide either `secretKey` or its `pat` alias, not both.",
+      "Provide either `pat` or its `secretKey` compatibility alias, not both.",
     );
   }
 
   const credential = secretKey ?? pat;
   if (!credential) {
     throw new ConfigurationError(
-      "A non-empty Inklet Project Secret Key is required.",
+      "A non-empty Inklet personal access token is required.",
     );
   }
 
@@ -206,11 +260,28 @@ function normalizeCredential(value: string | undefined): string | undefined {
 
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ConfigurationError(
-      "The Inklet Project Secret Key must be a non-empty string.",
+      "The Inklet personal access token must be a non-empty string.",
     );
   }
 
   return value.trim();
+}
+
+function normalizeUploadUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (cause) {
+    throw new InvalidResponseError({ cause });
+  }
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    url.username ||
+    url.password
+  ) {
+    throw new InvalidResponseError();
+  }
+  return url;
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
@@ -315,9 +386,16 @@ async function createResponseError(
   const payload = await readErrorPayload(response);
   const requestId = headerRequestId ?? payload.requestId;
   const serverCode = payload.code?.toLowerCase();
-  const options = { status: response.status, requestId };
+  const options = {
+    status: response.status,
+    ...(requestId === undefined ? {} : { requestId }),
+    ...(payload.details === undefined ? {} : { details: payload.details }),
+  };
 
   if (response.status === 401) {
+    if (serverCode === "authentication_failed") {
+      return new AuthenticationFailedError(options);
+    }
     if (serverCode?.includes("revoked")) {
       return new RevokedSecretKeyError(options);
     }
@@ -332,26 +410,43 @@ async function createResponseError(
   if (response.status === 403) {
     return new PermissionDeniedError(
       safeMessage ||
-        "The Project Secret Key is valid but does not have permission to access this resource.",
-      options,
+        "The personal access token does not have permission to access this resource.",
+      { ...options, code: serverCode ?? "permission_denied" },
     );
   }
 
   if (response.status === 404) {
     return new NotFoundError(
       safeMessage || "The requested Inklet resource was not found.",
-      options,
+      { ...options, code: serverCode ?? "not_found" },
     );
+  }
+
+  if (response.status === 409) {
+    return new ConflictError(safeMessage, {
+      ...options,
+      code: serverCode ?? "conflict",
+    });
+  }
+
+  if (response.status === 413) {
+    return new PayloadTooLargeError(safeMessage, {
+      ...options,
+      code: serverCode ?? "payload_too_large",
+    });
   }
 
   if (response.status === 429) {
     return new RateLimitError(
       safeMessage || "The Inklet API rate limit was exceeded. Retry later.",
-      options,
+      { ...options, code: serverCode ?? "rate_limited" },
     );
   }
 
-  return new ApiError(safeMessage, options);
+  return new ApiError(safeMessage, {
+    ...options,
+    code: serverCode ?? "api_error",
+  });
 }
 
 async function readErrorPayload(response: Response): Promise<ErrorPayload> {
@@ -395,6 +490,11 @@ function normalizeErrorPayload(value: unknown): ErrorPayload {
       nestedError?.requestId,
       nestedError?.request_id,
     ),
+    details: isRecord(nestedError?.details)
+      ? nestedError.details
+      : isRecord(value.details)
+        ? value.details
+        : undefined,
   };
 }
 

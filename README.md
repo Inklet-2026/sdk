@@ -2,20 +2,18 @@
 
 Official server-side JavaScript and TypeScript SDK for Inklet.
 
-> v0.1 alpha foundation: client initialization, Project Secret Key/PAT
-> authentication, and safe error handling. Display, Push, Content,
-> Presentation, Preview, and Webhook resource APIs will build on this
-> transport.
+The v0.1 alpha supports PAT authentication, Display and Presentation reads,
+Content lifecycle operations, and high-level Auto, Manual, and Hardcode Push
+workflows.
 
 ## Requirements
 
 - Node.js 20 or newer
-- A project-scoped Inklet Project Secret Key
-- A trusted server environment (Node.js service, serverless function,
-  automation script, or controlled local service)
+- An Inklet personal access token (PAT)
+- A trusted server environment
 
-Project Secret Keys must not be used in browser bundles. The SDK detects a
-browser runtime and throws before sending a request.
+Never expose a PAT in a browser bundle. The SDK rejects browser use before a
+request is sent.
 
 ## Install
 
@@ -29,89 +27,164 @@ npm install @inklethq/sdk@alpha
 import { Inklet } from "@inklethq/sdk";
 
 const inklet = new Inklet({
-  secretKey: process.env.INKLET_PROJECT_SECRET_KEY!,
-});
-```
-
-The same package also works from CommonJS JavaScript:
-
-```js
-const { Inklet } = require("@inklethq/sdk");
-
-const inklet = new Inklet({
-  secretKey: process.env.INKLET_PROJECT_SECRET_KEY,
-});
-```
-
-`pat` is accepted as a compatibility alias:
-
-```ts
-const inklet = new Inklet({
   pat: process.env.INKLET_PAT!,
 });
 ```
 
-Client construction validates configuration but does not make a network
-request. The first feature call performs the first request.
+CommonJS is supported too:
 
-The default service address is `https://dev.iminklet.com`, matching the
-[current Inklet backend API documentation](https://docs-dev.iminklet.com/api/).
-Keep the documented `/api/*` prefix in request paths:
+```js
+const { Inklet } = require("@inklethq/sdk");
 
-```ts
-const devices = await inklet.request("/api/devices");
+const inklet = new Inklet({ pat: process.env.INKLET_PAT });
 ```
 
-For a controlled local service or test server, override the API base URL:
+`secretKey` remains available as a compatibility alias for `pat`; do not pass
+both options. Client construction validates configuration without making a
+network request.
+
+The default service address is `https://dev.iminklet.com`. A controlled local
+or test service can be selected with `baseUrl`.
+
+## Displays and Presentations
 
 ```ts
-const inklet = new Inklet({
-  secretKey: process.env.INKLET_PROJECT_SECRET_KEY!,
-  baseUrl: "http://127.0.0.1:8787/v1",
+const page = await inklet.displays.list({ limit: 20 });
+const display = await inklet.displays.retrieve(page.items[0].id);
+
+const queue = await inklet.displays.listQueue(display.id, {
+  from: new Date("2026-08-01T00:00:00Z"),
+  limit: 20,
+});
+
+const current = await inklet.displays.current(display.id, { format: "png" });
+if (current) {
+  const presentation = await inklet.presentations.retrieve(current.id, {
+    format: "raw2",
+  });
+}
+```
+
+`displays.current()` is read-only and returns `null` when the Display has no
+confirmed Presentation.
+
+## Push
+
+Asset helpers validate supported content types and the 10 MiB per-binary-asset
+limit. Binary assets are uploaded directly to temporary storage URLs; the PAT
+is sent only to Inklet API endpoints.
+
+### Auto
+
+Auto Push lets Inklet choose compatible Displays.
+
+```ts
+const result = await inklet.push.auto({
+  idempotencyKey: "daily-brief-2026-08-12",
+  title: "Daily brief",
+  intent: "Make the key update easy to scan",
+  assets: [
+    inklet.assets.text("Revenue is up 12% week over week."),
+    inklet.assets.link("https://example.com/report"),
+  ],
 });
 ```
 
-## Foundation transport
+### Manual
 
-Resource modules use the authenticated request transport:
+Manual Push targets one Display while allowing Inklet to process and lay out
+the supplied assets.
 
 ```ts
-const displays = await inklet.request<{ data: Array<{ id: string }> }>(
-  "/api/devices",
-);
+import { readFile } from "node:fs/promises";
+
+const image = inklet.assets.image({
+  data: await readFile("chart.png"),
+  filename: "chart.png",
+  contentType: "image/png",
+});
+
+const result = await inklet.push.manual({
+  displayId: "display_123",
+  assets: [image, inklet.assets.text("This week's trend")],
+});
 ```
 
-Every request:
+### Hardcode
 
-- uses `Authorization: Bearer <Project Secret Key>`;
-- refuses absolute request URLs to prevent credentials being sent to another
-  origin;
-- refuses cross-origin redirects;
-- never includes the full credential in SDK error messages;
-- preserves `x-request-id`, `request-id`, or `x-correlation-id` on errors.
+Hardcode Push targets one Display and accepts exactly one PNG or JPEG. Inklet
+keeps the existing server behavior: it automatically scales the submitted
+image to the Display output size. The SDK intentionally does not require the
+source image dimensions to match the panel.
 
-Authentication, authorization, network, rate-limit, API, and invalid-response
-failures use distinct error classes:
+```ts
+import { readFile } from "node:fs/promises";
+
+const result = await inklet.push.hardcode({
+  displayId: "display_123",
+  image: inklet.assets.image({
+    data: await readFile("poster.jpg"),
+    filename: "poster.jpg",
+    contentType: "image/jpeg",
+  }),
+});
+```
+
+All high-level Push methods return the Content, generated idempotency key, and
+known Presentation IDs. When `idempotencyKey` is omitted, the SDK generates
+one and returns it in the result. For caller-controlled retries, supply and
+reuse your own key.
+
+Push processing is asynchronous. A successful call commonly returns a
+`processing` Content with no Presentation IDs yet. Poll
+`inklet.contents.retrieve(result.contentId)` until the Content becomes `ready`
+or `failed`. A `ready` Content means its Presentation IDs are persisted; an
+individual Presentation may briefly remain `preparing` while the render worker
+finishes the PNG, RAW2, and RAW4 files.
+
+## Content lifecycle
+
+The lower-level Content resource is available when an application needs to
+control individual lifecycle calls:
+
+```ts
+const content = await inklet.contents.retrieve("content_123");
+const contents = await inklet.contents.list({ mode: "manual", state: "ready" });
+const confirmed = await inklet.contents.confirm(content.id);
+```
+
+`contents.create()` and `contents.refreshUploadTickets()` are also public, but
+most applications should use `inklet.push.*`, which handles upload tickets,
+one ticket refresh/retry, and confirmation.
+
+## Errors
+
+Every SDK error extends `InkletError`. Backend error codes, status, request ID,
+and structured details are preserved.
 
 ```ts
 import {
-  InvalidSecretKeyError,
-  PermissionDeniedError,
-  RevokedSecretKeyError,
+  AuthenticationFailedError,
+  InkletError,
+  RateLimitError,
 } from "@inklethq/sdk";
 
 try {
-  await inklet.request("/api/devices");
+  await inklet.displays.list();
 } catch (error) {
-  if (error instanceof RevokedSecretKeyError) {
-    // Rotate the Project Secret Key.
-  } else if (error instanceof InvalidSecretKeyError) {
-    // Check the configured project and credential.
-  } else if (error instanceof PermissionDeniedError) {
-    // The credential is valid, but the project cannot access this resource.
+  if (error instanceof AuthenticationFailedError) {
+    // Replace or reactivate the PAT.
+  } else if (error instanceof RateLimitError) {
+    // Retry according to your application policy.
+  } else if (error instanceof InkletError) {
+    console.error(error.code, error.requestId, error.details);
   }
 }
 ```
+
+Authenticated requests refuse absolute URLs and cross-origin redirects.
+Credentials are redacted from errors, and storage uploads never include the
+PAT.
 
 ## Development
 
@@ -121,5 +194,5 @@ npm run check
 npm run pack:check
 ```
 
-`npm run check` runs strict TypeScript checking, unit tests, and the ESM/CJS
-build.
+`npm run check` builds ESM and CommonJS output, runs strict TypeScript checks,
+and executes the test suite.

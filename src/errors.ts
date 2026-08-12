@@ -2,6 +2,7 @@ export interface InkletErrorOptions {
   code: string;
   status?: number | undefined;
   requestId?: string | undefined;
+  details?: Readonly<Record<string, unknown>> | undefined;
   cause?: unknown;
 }
 
@@ -14,6 +15,7 @@ export class InkletError extends Error {
   readonly code: string;
   readonly status: number | undefined;
   readonly requestId: string | undefined;
+  readonly details: Readonly<Record<string, unknown>> | undefined;
 
   constructor(message: string, options: InkletErrorOptions) {
     super(message, { cause: options.cause });
@@ -21,6 +23,7 @@ export class InkletError extends Error {
     this.code = options.code;
     this.status = options.status;
     this.requestId = options.requestId;
+    this.details = options.details;
   }
 
   toJSON(): Record<string, unknown> {
@@ -30,6 +33,7 @@ export class InkletError extends Error {
       code: this.code,
       status: this.status,
       requestId: this.requestId,
+      details: this.details,
     };
   }
 }
@@ -43,7 +47,7 @@ export class ConfigurationError extends InkletError {
 export class BrowserEnvironmentError extends InkletError {
   constructor() {
     super(
-      "Inklet Project Secret Keys can only be used in trusted server environments. Move this request to a server, serverless function, or controlled local service.",
+      "Inklet personal access tokens can only be used in trusted server environments. Move this request to a server, serverless function, or controlled local service.",
       { code: "browser_environment" },
     );
   }
@@ -51,10 +55,19 @@ export class BrowserEnvironmentError extends InkletError {
 
 export class AuthenticationError extends InkletError {}
 
+export class AuthenticationFailedError extends AuthenticationError {
+  constructor(options: Omit<InkletErrorOptions, "code"> = {}) {
+    super(
+      "Inklet authentication failed. Check that the personal access token is valid and active.",
+      { ...options, code: "authentication_failed" },
+    );
+  }
+}
+
 export class InvalidSecretKeyError extends AuthenticationError {
   constructor(options: Omit<InkletErrorOptions, "code"> = {}) {
     super(
-      "Inklet authentication failed. Check that the Project Secret Key is valid and belongs to the intended project.",
+      "Inklet authentication failed. Check that the personal access token is valid and active.",
       { ...options, code: "invalid_secret_key" },
     );
   }
@@ -63,33 +76,94 @@ export class InvalidSecretKeyError extends AuthenticationError {
 export class RevokedSecretKeyError extends AuthenticationError {
   constructor(options: Omit<InkletErrorOptions, "code"> = {}) {
     super(
-      "The Inklet Project Secret Key has been revoked. Create a new key and update the server configuration.",
+      "The Inklet personal access token has been revoked. Create a new token and update the server configuration.",
       { ...options, code: "revoked_secret_key" },
     );
   }
 }
 
 export class PermissionDeniedError extends InkletError {
-  constructor(message: string, options: Omit<InkletErrorOptions, "code"> = {}) {
-    super(message, { ...options, code: "permission_denied" });
+  constructor(
+    message: string,
+    options: Omit<InkletErrorOptions, "code"> & { code?: string } = {},
+  ) {
+    super(message, { ...options, code: options.code ?? "permission_denied" });
   }
 }
 
 export class NotFoundError extends InkletError {
-  constructor(message: string, options: Omit<InkletErrorOptions, "code"> = {}) {
-    super(message, { ...options, code: "not_found" });
+  constructor(
+    message: string,
+    options: Omit<InkletErrorOptions, "code"> & { code?: string } = {},
+  ) {
+    super(message, { ...options, code: options.code ?? "not_found" });
   }
 }
 
 export class RateLimitError extends InkletError {
-  constructor(message: string, options: Omit<InkletErrorOptions, "code"> = {}) {
-    super(message, { ...options, code: "rate_limited" });
+  constructor(
+    message: string,
+    options: Omit<InkletErrorOptions, "code"> & { code?: string } = {},
+  ) {
+    super(message, { ...options, code: options.code ?? "rate_limited" });
+  }
+}
+
+export class PayloadTooLargeError extends InkletError {
+  constructor(
+    message: string,
+    options: Omit<InkletErrorOptions, "code"> & { code?: string } = {},
+  ) {
+    super(message, { ...options, code: options.code ?? "payload_too_large" });
+  }
+}
+
+export class ConflictError extends InkletError {
+  constructor(
+    message: string,
+    options: Omit<InkletErrorOptions, "code"> & { code?: string } = {},
+  ) {
+    super(message, { ...options, code: options.code ?? "conflict" });
+  }
+}
+
+export class UnsupportedOperationError extends InkletError {
+  constructor(message: string) {
+    super(message, { code: "unsupported_operation" });
+  }
+}
+
+export interface AssetUploadErrorOptions
+  extends Omit<InkletErrorOptions, "code"> {
+  contentId?: string | undefined;
+  failedAssetIndexes: readonly number[];
+}
+
+export class AssetUploadError extends InkletError {
+  readonly contentId: string | undefined;
+  readonly failedAssetIndexes: readonly number[];
+
+  constructor(message: string, options: AssetUploadErrorOptions) {
+    super(message, { ...options, code: "asset_upload_failed" });
+    this.contentId = options.contentId;
+    this.failedAssetIndexes = [...options.failedAssetIndexes];
+  }
+
+  override toJSON(): Record<string, unknown> {
+    return {
+      ...super.toJSON(),
+      contentId: this.contentId,
+      failedAssetIndexes: this.failedAssetIndexes,
+    };
   }
 }
 
 export class ApiError extends InkletError {
-  constructor(message: string, options: Omit<InkletErrorOptions, "code"> = {}) {
-    super(message, { ...options, code: "api_error" });
+  constructor(
+    message: string,
+    options: Omit<InkletErrorOptions, "code"> & { code?: string } = {},
+  ) {
+    super(message, { ...options, code: options.code ?? "api_error" });
   }
 }
 

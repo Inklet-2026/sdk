@@ -8,6 +8,11 @@ describe("published package exports", () => {
 
     assert.equal(typeof sdk.Inklet, "function");
     assert.equal(sdk.Inklet, sdk.InkletClient);
+    assert.equal(typeof sdk.AssetsResource, "function");
+    assert.equal(typeof sdk.ContentsResource, "function");
+    assert.equal(typeof sdk.DisplaysResource, "function");
+    assert.equal(typeof sdk.PresentationsResource, "function");
+    assert.equal(typeof sdk.PushResource, "function");
   });
 
   it("loads through the CommonJS require condition", () => {
@@ -16,5 +21,6 @@ describe("published package exports", () => {
 
     assert.equal(typeof sdk.Inklet, "function");
     assert.equal(sdk.Inklet, sdk.InkletClient);
+    assert.equal(typeof sdk.PushResource, "function");
   });
 });
