@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-alpha.2 — 2026-08-13
+## 0.1.0 — 2026-08-13
 
 - Add typed Display, Content, Presentation, Asset, and Push resources.
 - Add Auto, Manual, and Hardcode Push workflows.

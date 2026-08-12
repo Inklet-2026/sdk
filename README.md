@@ -2,7 +2,7 @@
 
 Official server-side JavaScript and TypeScript SDK for Inklet.
 
-The v0.1 alpha supports PAT authentication, Display and Presentation reads,
+The v0.1 release supports PAT authentication, Display and Presentation reads,
 Content lifecycle operations, and high-level Auto, Manual, and Hardcode Push
 workflows.
 
@@ -18,7 +18,7 @@ request is sent.
 ## Install
 
 ```sh
-npm install @inklethq/sdk@alpha
+npm install @inklethq/sdk
 ```
 
 ## Initialize
